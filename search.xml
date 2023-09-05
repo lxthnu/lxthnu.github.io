@@ -4,6 +4,58 @@
   
     
     <entry>
+      <title>RDMA基本服务类型</title>
+      <link href="/posts/9078.html"/>
+      <url>/posts/9078.html</url>
+      
+        <content type="html"><![CDATA[<p>🐱PS：</p><p>本文是对该博客（<a href="https://zhuanlan.zhihu.com/p/144099636">https://zhuanlan.zhihu.com/p/144099636</a>）的一个学习笔记。</p><p>若考虑使用哪种服务类型的QP，指路：<a href="https://www.rdmamojo.com/2013/06/01/which-queue-pair-type-to-use/">https://www.rdmamojo.com/2013/06/01/which-queue-pair-type-to-use/</a></p><h1 id="可靠服务"><a href="#可靠服务" class="headerlink" title="可靠服务"></a>可靠服务</h1><p>IB协议中是这样描述可靠服务的：可靠服务在发送和接受者之间保证了信息最多只会传递一次，并且能够保证其按照发送顺序被接收。</p><p>IB通过以下三个机制来保证可靠性：</p><ul><li>在IB协议的可靠服务类型中，使用了<strong>应答机制</strong>来保证数据包被对方收到。即接收端在接收到数据包后返回ACK。IB的可靠服务类型中，接收方不是每一个包都必须回复，也可以一次回复多个包的ACK。</li><li>IB协议使用CRC进行<strong>数据校验</strong>。发端会对Header和Payload（有效载荷，也就是真正要收发的数据）通过一定的算法得到一个校验值放到数据包的末尾。对端收到数据包后，也会用相同的算法计算出校验值，然后与数据包中的校验值比对，如果不一致，说明数据中包含错误（一般是链路问题导致的），那么接收端就会丢弃这个数据包。</li><li>IB协议中有PSN（Packet Sequence Number，包序号）进行<strong><strong>保序</strong></strong>，即每个包都有一个递增的编号。PSN可以用来检测是否丢包，比如收端收到了1，但是在没收到2的情况下就收到了3，那么其就会认为传输过程中发生了错误，之后会回复一个NAK给发端，让其重发丢失的包。<ul><li>PSN是每个QP都具有的，不同QP间是相互独立的。</li></ul></li></ul><blockquote><p>ICRC 校验发生在IB链路层, 而NAK是IB 传输层的功能。NAK会发生，但是发生在下一个packet (with no ICRC error)。比如，PSN为10的数据包在传输到响应方时出现了某种损坏，由于ICRC错误，响应方IB链路层将会丢弃该数据包。这时IB 传输层 会看到 PSN&#x3D;9 后面跟着 PSN&#x3D;11。PSN&#x3D;11 会触发IB传输层发起NAK。</p></blockquote><aside>💡 标准的IB规范不会等待重新排序。比如，PSN=2发生错误被丢弃，当PSN=3收到时，IB 传输层马上就会发起一个NAK（PSN=2），并不会花时间等2。</aside><aside>💡 CRC是硬件完成的，CPU不参与报文处理。对于Soft-RoCE和Soft-iWARP来说，它们的CRC校验只能由CPU来完成，这对性能影响很大。</aside><aside>💡 CRC保证的是单个报文的正确性，当底层将大数据进行拆包时，需要对每一个小包进行计算。</aside><h1 id="不可靠服务"><a href="#不可靠服务" class="headerlink" title="不可靠服务"></a>不可靠服务</h1><p>没有上述这些机制来保证数据包被正确的接收，属于“发出去就行，我不关心有没有被收到”的服务类型。</p><h1 id="基于连接的服务"><a href="#基于连接的服务" class="headerlink" title="基于连接的服务"></a>基于连接的服务</h1><p>每个QP都和另一个远端节点相关联。在这种情况下，QP Context（简称QPC）中包含有远端节点的QP信息。在建立通信的过程中，两个节点会交换包括稍后用于通信的QP在内的对端信息。<strong>在连接服务类型中的每个QP，都和唯一的另一个QP建立了连接，</strong>也就是说QP下发的每个WQE的目的地都是唯一的。</p><h1 id="基于数据报的服务"><a href="#基于数据报的服务" class="headerlink" title="基于数据报的服务"></a>基于<strong>数据报</strong>的服务</h1><p>与连接相反，发端和收端间不需要“建立管道”的步骤，只要发端到收端物理上是可以到达的，那么我就可能从任何路径发给任意的收端节点。</p><ul><li><p>IB协议对其的定义是这样的：</p><p>对于数据报服务来说，QP不会跟一个唯一的远端节点绑定，而是<strong>通过WQE来指定目的节点</strong>。和连接类型的服务一样，建立通信的过程也需要两端交换对端信息，但是数据报服务对于每个目的节点都需要执行一次这个交换过程。</p></li></ul><p>比如，在数据报类型的QP的Context中，不包含对端信息，即每个QP不跟另一个QP绑定。QP下发给硬件的<strong>每个WQE</strong>都可能<strong>指向不同的目的地</strong>。与连接服务类型一样，本端QP可以和哪个对端QP发送数据，是在准备阶段提前通过某些方式相互告知的。这也是上文“数据报服务对于每个目的节点都需要执行一次这个交换过程”的含义。</p><aside>💡 在基于连接的服务中，一对一连接需要存储更多的context或data以维持一对一连接状态，但数据报不需要存储那么多的数据。不过连接可以做到bypass CPU，但数据报不能bypass CPU。</aside><h1 id="RC"><a href="#RC" class="headerlink" title="RC"></a>RC</h1><p>基于连接的可靠服务，类比TCP&#x2F;IP协议栈传输层的TCP。</p><p>RC用于对数据完整性和可靠性要求较高的场景，跟TCP一样，因为需要各种机制来保证可靠，所以开销自然会大一些。</p><p>由于RC服务类型和每个节点间需要各自维护一个QP，假设有N个节点要相互通信，那么至少需要**N * (N - 1)**个QP，而QP和QPC本身是需要占用网卡资源或者内存的，当节点数很多时，存储资源消耗将会非常大。</p><h1 id="UC"><a href="#UC" class="headerlink" title="UC"></a>UC</h1><p>基于连接的不可靠服务。</p><ul><li><p>注意UC支持WRITE却不支持READ操作</p><blockquote><p>因为read需要请求端网卡保存上下文等信息（比如保存一些状态以等待某个发出去的READ返回数据），如果是不可靠的话，<strong>包丢失会造成网卡永久等待READ返回</strong>，这种行为不太符合常理，因此不可靠连接无法支持READ；</p></blockquote></li></ul><h1 id="RD"><a href="#RD" class="headerlink" title="RD"></a>RD</h1><p>基于数据报的可靠服务。各厂商选择实现是否支持该服务。</p><h1 id="UD"><a href="#UD" class="headerlink" title="UD"></a>UD</h1><p>基于数据报的不可靠服务，类比TCP&#x2F;IP协议栈传输层的UDP。</p><p>UD硬件开销小并且节省存储资源，比如N个节点需要相互通信，只需要创建<strong>N</strong>个QP就可以了，但是可靠性跟UDP一样没法保证。用户如果想基于UD服务类型实现可靠性，那么需要自己基于IB传输层实现应用层的可靠传输机制。</p><ul><li><p>注意UD不支持WRITE操作，只能用于SEND</p><blockquote><p>无论是可靠连接还是不可靠连接，都要求QP一对一连接（即文中的“建立管道”），也就是说READ和WRITE都需要一对一连接，但数据报无需一对一连接，因此没有一对一连接这个前提，所以无法支持WRITE</p></blockquote></li></ul><h1 id="各服务类型支持的操作"><a href="#各服务类型支持的操作" class="headerlink" title="各服务类型支持的操作"></a>各服务类型支持的操作</h1><p><img src="/img/4pic.png" alt="Untitled"></p><h1 id="一些问题及回答"><a href="#一些问题及回答" class="headerlink" title="一些问题及回答"></a>一些问题及回答</h1><p>如果一个qp占用了某udp src port，同一机器上的非rdma 的 udp程序还能用这个udp 源端口号吗？</p><blockquote><p>可以复用，IB规范对这个UDP Source Port没有做规定，一般是用这个域段做链路间的负载均衡。有的厂商通过驱动里做HASH得出一个值然后配到了硬件里，有的厂商甚至都没有做，估计是个随机值或者固定值。</p></blockquote><p>rdma中rc和ud能否拥有相同的qp number，网卡驱动根据qp type进行区分？</p><blockquote><p>不可以。这不止是修改驱动的问题，从API、整个RDMA软件栈和硬件实现来看，QP类型和QPN都是QP的固有属性之一，QP类型不同，调用API时传递的参数、软件栈的处理、QPC&#x2F;WQE的布局、硬件的处理都会有差异。虽然理论上可以这么搞，但是代价是破坏了一个成熟的标准，相当于自己重新定义了一种协议。</p></blockquote><p>RC和UD它们的具体应用场景是在哪里？</p><blockquote><p>RC用在对可靠性要求较高的场景，但是因为需要建立很多QP来维持进程间的连接，所以对内存的消耗很大。使用UD的话，每个进程只需要保留一个QP就可实现对整个组网内的其他进程通信，但是可靠性需要由上层保证。此外还有一种XRC服务，相比于RC可以节省通信所需的QP数。</p></blockquote>]]></content>
+      
+      
+      <categories>
+          
+          <category> RDMA学习 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> RDMA </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>安装linux内核教程</title>
+      <link href="/posts/2366.html"/>
+      <url>/posts/2366.html</url>
+      
+        <content type="html"><![CDATA[<h1 id="方法一"><a href="#方法一" class="headerlink" title="方法一"></a>方法一</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 安装所需依赖包</span></span><br><span class="line">sudo apt install build-essential libncurses5-dev fakeroot xz-utils</span><br><span class="line">sudo apt install flex libdaemon-dev libbison-dev libelf-dev</span><br><span class="line">sudo apt-get install libssl-dev</span><br><span class="line">sudo apt-get install dwarves</span><br><span class="line"></span><br><span class="line"><span class="comment"># 去官网下载你想要安装的内核版本，然后解压到/lib/modules目录下</span></span><br><span class="line"><span class="built_in">cd</span> 内核源码文件夹</span><br><span class="line"></span><br><span class="line"><span class="comment"># 创建内核配置文件</span></span><br><span class="line">sudo make menuconfig</span><br><span class="line"></span><br><span class="line"><span class="comment"># 编译内核源码</span></span><br><span class="line">sudo make -j16</span><br><span class="line"></span><br><span class="line"><span class="comment"># 内核模块安装</span></span><br><span class="line">sudo make modules_install</span><br><span class="line"></span><br><span class="line"><span class="comment"># 内核安装</span></span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure><h1 id="方法二"><a href="#方法二" class="headerlink" title="方法二"></a>方法二</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 拷贝原来的内核配置文件</span></span><br><span class="line">sudo <span class="built_in">cp</span> /boot/config-`<span class="built_in">uname</span> -r`* .config</span><br><span class="line"></span><br><span class="line"><span class="comment"># 配置内核</span></span><br><span class="line">sudo make defconfig</span><br><span class="line"></span><br><span class="line"><span class="comment"># 编译内核并安装</span></span><br><span class="line">sudo make -j$(<span class="built_in">nproc</span>)</span><br><span class="line">sudo make modules_install install</span><br></pre></td></tr></table></figure><blockquote><p>ps：方法一和方法二我都试过，可以成功安装</p></blockquote><p><strong>记录一下安装内核处理过的错误：</strong></p><p><a href="https://blog.csdn.net/m0_47696151/article/details/121574718">(111条消息) 编译内核报错 No rule to make target ‘debian&#x2F;canonical-certs.pem‘ 或 ‘canonical-revoked-certs.pem‘ 的解决方法_lylhw13_的博客-CSDN博客</a></p><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">sudo scripts/config --<span class="built_in">disable</span> SYSTEM_TRUSTED_KEYS</span><br><span class="line">sudo scripts/config --<span class="built_in">disable</span> SYSTEM_REVOCATION_KEYS</span><br><span class="line">sudo make <span class="comment"># sudo make V=1 all</span></span><br></pre></td></tr></table></figure><p><strong>参考</strong>：</p><p><a href="https://blog.csdn.net/SweeNeil/article/details/83684565">https://blog.csdn.net/SweeNeil/article/details/83684565</a><br><a href="https://blog.csdn.net/qq_42793254/article/details/103074998">https://blog.csdn.net/qq_42793254/article/details/103074998</a></p><h1 id="切换内核版本"><a href="#切换内核版本" class="headerlink" title="切换内核版本"></a>切换内核版本</h1><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 查看可用内核信息</span></span><br><span class="line">grep menuentry /boot/grub/grub.cfg </span><br><span class="line"></span><br><span class="line">sudo vim /etc/default/grub</span><br><span class="line"><span class="comment"># 写入GRUB_DEFAULT=&quot;Advanced options for Ubuntu &gt; Ubuntu, with Linux 4.18.0-18-generic&quot;</span></span><br><span class="line"><span class="comment"># 其中Linux 4.18.0-18-generic为你想切换到的版本</span></span><br><span class="line"></span><br><span class="line">sudo update-grub </span><br><span class="line"></span><br><span class="line"><span class="comment"># 然后重启电脑 </span></span><br><span class="line">sudo reboot</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查看当前内核版本</span></span><br><span class="line"><span class="built_in">uname</span> -r</span><br></pre></td></tr></table></figure>]]></content>
+      
+      
+      <categories>
+          
+          <category> linux学习 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> linux </tag>
+            
+            <tag> linux内核 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
       <title>开源项目toktik环境搭建</title>
       <link href="/posts/9673.html"/>
       <url>/posts/9673.html</url>
