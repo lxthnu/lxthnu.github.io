@@ -1,0 +1,488 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>解读LiveClip:基于RDL的一种自适应短视频流策略 | sanli的博客之家</title><meta name="author" content="sanli"><meta name="copyright" content="sanli"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="本文提出了一种名为 LiveClip 的自适应流媒体策略，它基于强化学习框架。所提出的方法可以以较低的使用成本开销（缓冲了但由滚动事件而从未被观看的内容）带来更好的 QoE（重新缓冲次数较少）。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="解读LiveClip:基于RDL的一种自适应短视频流策略">
+<meta property="og:url" content="https://sanli-b.com.cn/posts/42132.html">
+<meta property="og:site_name" content="sanli的博客之家">
+<meta property="og:description" content="本文提出了一种名为 LiveClip 的自适应流媒体策略，它基于强化学习框架。所提出的方法可以以较低的使用成本开销（缓冲了但由滚动事件而从未被观看的内容）带来更好的 QoE（重新缓冲次数较少）。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://sanli-b.com.cn/img/liveclip.png">
+<meta property="article:published_time" content="2023-10-10T07:36:25.000Z">
+<meta property="article:modified_time" content="2023-10-10T08:26:06.820Z">
+<meta property="article:author" content="sanli">
+<meta property="article:tag" content="短视频自适应预取">
+<meta property="article:tag" content="预取算法">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://sanli-b.com.cn/img/liveclip.png"><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://sanli-b.com.cn/posts/42132.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox/fancybox.min.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: {"path":"/search.xml","preload":true,"top_n_per_article":1,"unescape":false,"languages":{"hits_empty":"找不到您查询的内容：${query}","hits_stats":"共找到 ${hits} 篇文章"}},
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '天',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: {"languages":{"author":"作者: sanli","link":"链接: ","source":"来源: sanli的博客之家","info":"著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。"}},
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  source: {
+    justifiedGallery: {
+      js: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.css'
+    }
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: true
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '解读LiveClip:基于RDL的一种自适应短视频流策略',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2023-10-10 16:26:06'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(win=>{
+    win.saveToLocal = {
+      set: function setWithExpiry(key, value, ttl) {
+        if (ttl === 0) return
+        const now = new Date()
+        const expiryDay = ttl * 86400000
+        const item = {
+          value: value,
+          expiry: now.getTime() + expiryDay,
+        }
+        localStorage.setItem(key, JSON.stringify(item))
+      },
+
+      get: function getWithExpiry(key) {
+        const itemStr = localStorage.getItem(key)
+
+        if (!itemStr) {
+          return undefined
+        }
+        const item = JSON.parse(itemStr)
+        const now = new Date()
+
+        if (now.getTime() > item.expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return item.value
+      }
+    }
+  
+    win.getScript = url => new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = url
+      script.async = true
+      script.onerror = reject
+      script.onload = script.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        script.onload = script.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(script)
+    })
+  
+    win.getCSS = (url,id = false) => new Promise((resolve, reject) => {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = url
+      if (id) link.id = id
+      link.onerror = reject
+      link.onload = link.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        link.onload = link.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(link)
+    })
+  
+      win.activateDarkMode = function () {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      win.activateLightMode = function () {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+      const t = saveToLocal.get('theme')
+    
+          const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+          const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+          const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+          const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+
+          if (t === undefined) {
+            if (isLightMode) activateLightMode()
+            else if (isDarkMode) activateDarkMode()
+            else if (isNotSpecified || hasNoSupport) {
+              const now = new Date()
+              const hour = now.getHours()
+              const isNight = hour <= 6 || hour >= 18
+              isNight ? activateDarkMode() : activateLightMode()
+            }
+            window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+              if (saveToLocal.get('theme') === undefined) {
+                e.matches ? activateDarkMode() : activateLightMode()
+              }
+            })
+          } else if (t === 'light') activateLightMode()
+          else activateDarkMode()
+        
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
+      }
+    
+    const detectApple = () => {
+      if(/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+    })(window)</script><link rel="stylesheet" href="/zan/zan.css"><meta name="generator" content="Hexo 6.3.0"><link rel="alternate" href="/atom.xml" title="sanli的博客之家" type="application/atom+xml">
+</head><body><div id="loading-box"><div class="loading-left-bg"></div><div class="loading-right-bg"></div><div class="spinner-box"><div class="configure-border-1"><div class="configure-core"></div></div><div class="configure-border-2"><div class="configure-core"></div></div><div class="loading-word">加载中...</div></div></div><script>(()=>{
+  const $loadingBox = document.getElementById('loading-box')
+  const $body = document.body
+  const preloader = {
+    endLoading: () => {
+      $body.style.overflow = ''
+      $loadingBox.classList.add('loaded')
+    },
+    initLoading: () => {
+      $body.style.overflow = 'hidden'
+      $loadingBox.classList.remove('loaded')
+    }
+  }
+
+  preloader.initLoading()
+  window.addEventListener('load',() => { preloader.endLoading() })
+
+  if (true) {
+    document.addEventListener('pjax:send', () => { preloader.initLoading() })
+    document.addEventListener('pjax:complete', () => { preloader.endLoading() })
+  }
+})()</script><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img is-center"><img src="https://picx.zhimg.com/80/v2-c4f6908a24f979675b29f5d3c3f090f1_1440w.webp?source=1940ef5c" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="sidebar-site-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">8</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div><hr class="custom-hr"/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/messageboard/"><i class="fa-fw fas fa-envelope-open"></i><span> 留言板</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url('/img/liveclip.png')"><nav id="nav"><span id="blog-info"><a href="/" title="sanli的博客之家"><span class="site-name">sanli的博客之家</span></a></span><div id="menus"><div id="search-button"><a class="site-page social-icon search" href="javascript:void(0);"><i class="fas fa-search fa-fw"></i><span> 搜索</span></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 时间线</span></a></div><div class="menus_item"><a class="site-page" href="/messageboard/"><i class="fa-fw fas fa-envelope-open"></i><span> 留言板</span></a></div></div><div id="toggle-menu"><a class="site-page" href="javascript:void(0);"><i class="fas fa-bars fa-fw"></i></a></div></div></nav><div id="post-info"><h1 class="post-title">解读LiveClip:基于RDL的一种自适应短视频流策略</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2023-10-10T07:36:25.000Z" title="发表于 2023-10-10 15:36:25">2023-10-10</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2023-10-10T08:26:06.820Z" title="更新于 2023-10-10 16:26:06">2023-10-10</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E8%AE%BA%E6%96%87%E9%98%85%E8%AF%BB/">论文阅读</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title="解读LiveClip:基于RDL的一种自适应短视频流策略"><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">阅读量:</span><span id="busuanzi_value_page_pv"></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="LiveClip-Towards-Intelligent-Mobile-Short-Form-Video-Streaming-with-Deep-Reinforcement-Learning"><a href="#LiveClip-Towards-Intelligent-Mobile-Short-Form-Video-Streaming-with-Deep-Reinforcement-Learning" class="headerlink" title="LiveClip: Towards Intelligent Mobile Short-Form Video Streaming with Deep Reinforcement Learning"></a>LiveClip: Towards Intelligent Mobile Short-Form Video Streaming with Deep Reinforcement Learning</h1><p><em><strong>NOSSDAV ‘20 ccf b</strong></em></p>
+<h1 id="研究背景"><a href="#研究背景" class="headerlink" title="研究背景"></a>研究背景</h1><p>实测研究表明，抖音采用了一种相当简单的基于HTTP渐进式下载的策略（称为Next-One策略），该策略使用带有停止等待协议的滑动窗口。当网络连接较慢且用户滚动较快时，这种策略效果不佳。结果激励我们为移动短视频设计智能自适应流媒体方案。</p>
+<p>由于不可预测的网络条件和频繁的用户交互事件（例如不耐烦的滚动和提前退出），满足短视频应用程序的用户体验质量（QoE）具有挑战性。</p>
+<p>然而，最近的 深度强化学习 相关工作旨在研究传统长视频的比特率选择，而不是移动短视频，因为移动短视频是播放列表驱动的，通常具有恒定的比特率。</p>
+<h2 id="待解决的问题"><a href="#待解决的问题" class="headerlink" title="待解决的问题"></a>待解决的问题</h2><p>尽管做了上述工作，短视频服务仍然面临挑战：</p>
+<p>缓存决策具有级联效应。也就是说，流畅播放需要足够的预取数据，这会<strong>抢占其他视频的缓存</strong>，导致日后卡顿。无线移动<strong>网络连接动态变化</strong>。</p>
+<p>而大多数短视频服务平台（例如抖音）都试探性地采用了 <strong>HTTP 渐进式下载策略</strong>，因此<strong>流媒体不是码率自适应的</strong>，因此<strong>更容易受到网络动态的影响</strong>。最后但并非最不重要的一点是，用户可以在很短的时间内轻松生成大量滚动事件，这可能会<strong>导致极高的缓存未命中率</strong>。</p>
+<h1 id="贡献"><a href="#贡献" class="headerlink" title="贡献"></a>贡献</h1><p>提出了一种名为 LiveClip 的自适应流媒体策略，它基于强化学习框架。所提出的方法可以以较低的使用成本开销（缓冲了但由滚动事件而从未被观看的内容）带来更好的 QoE（重新缓冲次数较少）。</p>
+<h2 id="抖音的测量研究"><a href="#抖音的测量研究" class="headerlink" title="抖音的测量研究"></a>抖音的测量研究</h2><p>我们首先对中国流行的短视频移动应用程序抖音进行了系统的测量研究。测量结果表明，抖音采用的简单的next-one策略导致了用户观看体验的下降和额外的资源使用成本。</p>
+<h3 id="研究结果"><a href="#研究结果" class="headerlink" title="研究结果"></a>研究结果</h3><p>抖音则采用<strong>渐进式下载</strong>。它也基于 HTTP，但 CDN 托管完整的视频文件。（通过抓包获得连续视频的传输时间线）播放器总是下载当前视频。完成后，播放器开始下载下一个视频文件。当有滚动事件时，先前的连接会立即关闭。我们将这种固定的流方案称为 Next-One 策略。</p>
+<hr>
+<p>较长的延迟和更快的网络速度会减少重新缓冲事件的数量。总浪费成本定义为<strong>下降量</strong>与<strong>部分中绿点数量的差值</strong>，如果差值为负则为 0。（即释放的量表示该视频的下载量，绿点个数表示用户观看的量）</p>
+<p><img src="/img/Untitled-16969233990681.png" alt="Untitled"></p>
+<p>例如，播放器在第一段中仅获得了4秒（4个绿点，绿点表示平滑播放）的流畅播放，之后的下降从4.27下降到0，因此<strong>间断时间为6秒</strong>（10-4），<strong>浪费时间为0.27秒。</strong></p>
+<hr>
+<p>通过使用 Appium [1]，我们可以模拟真实用户的滚动行为。我们观察到超过一半的视频 (68.6%) 不超过 15 秒，平均视频比特率为1190 Kbps。</p>
+<p>结果显示，33%的<strong>推荐视频</strong>是在一天内发布的，72%是在一周内发布的，96%是在一个月内发布的。推荐系统倾向于推荐最近的视频（前10天左右）。</p>
+<h2 id="LiveClip"><a href="#LiveClip" class="headerlink" title="LiveClip"></a>LiveClip</h2><p>使用深度强化学习（DRL）方法提出了一种称为 LiveClip 的自适应短视频流策略。 LiveClip网络合并<strong>下载速度</strong>和<strong>用户交互</strong>等外部因素，以及考虑了<strong>播放列表</strong>中视频的信息。<strong>不同网络场景</strong>下对应有不同的神经网络模型。</p>
+<hr>
+<p>T 表示观看会话的总时长。</p>
+<p> bt ：时间 t 时的下载速度、 ct ：时间 t 时的用户交互、 dt ：时间 t 时的玩家状态。</p>
+<p>Tslot: 选择在每个时间段下载播放列表中的哪些视频。将时隙Tslot和视频段设置为<strong>1秒为单位</strong></p>
+<p>在每个时间步，决策者（player）选择一个动作 a，在给定转移概率 Pa(s, s ‘) 的情况下从状态 s 转移到新的状态 s ‘，并获得相应的奖励 Ra(s, s ‘)。</p>
+<p>令 S &#x3D; {s1, s2, . 。 。 , sT } 表示<strong>状态空间</strong>。 T 是观看会话的总时长。 <strong>st &#x3D; (bt ,ct ,dt )。</strong></p>
+<p>设 vt 表示时间 t 时播放器窗口所在的视频。</p>
+<p>Bvt ：时间 t 时视口中视频的缓冲内容、 Qvt ：播放进度、 Mvt 表示：视频长度。仅当<strong>当前片段完全下载后，播放器才开始播放</strong>。</p>
+<hr>
+<h3 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h3><p>我们假设视频<strong>以恒定的比特率进行编码</strong>，以便<strong>具有相同长度</strong>的每个片段具有<strong>相同的大小</strong>。</p>
+<p>在每个时隙，播放器只能请求滑动窗口中的一个视频。当用户滚动屏幕时，滑走的视频内容将立即被驱逐。</p>
+<p>⚠️（ddl）假设时隙为 1 秒，当下一个 1 秒片段尚未完全缓冲时，视频播放就会停止。</p>
+<hr>
+<h3 id="下载速度和用户交互学习"><a href="#下载速度和用户交互学习" class="headerlink" title="下载速度和用户交互学习"></a>下载速度和用户交互学习</h3><p>我们构建了一个一维 CNN 层，并将过去 k 秒的下载速度作为输入，学习<strong>下载速度的模式</strong>。</p>
+<p>我们构建了另一个 1D-CNN 来学习用户行为模式。以过去k个视频的停留时间作为输入。它学习历史用户交互的模式，并希望它能够<strong>预测用户最有可能滚动屏幕的时间。</strong></p>
+<h3 id="状态空间相关因素"><a href="#状态空间相关因素" class="headerlink" title="状态空间相关因素"></a>状态空间相关因素</h3><ul>
+<li>过去k 秒的下载速度测量。—提供下载速度历史信息</li>
+<li>过去k个视频的用户停留时间。—提供用户行为历史信息</li>
+<li>播放进度。—播放器当前的播放状态</li>
+<li>当前停留时间。</li>
+<li>重播回合。</li>
+<li>滑动窗口中视频的比特率。—滑动窗口中<strong>正在观看</strong>或接下来几秒<strong>将观看的视频</strong>相关</li>
+<li>滑动窗口中视频的长度。</li>
+<li>滑动窗口中的视频缓冲内容。</li>
+<li>下载滑动窗口中视频所花费的时间。</li>
+<li>滑动窗口中已完成的视频。</li>
+</ul>
+<h3 id="动作"><a href="#动作" class="headerlink" title="动作"></a>动作</h3><p>设 A &#x3D; {a1, a2, …, aT } 表示动作空间。给定一个状态，代理需要采取操作 at &#x3D; (E ft , Edt )，其中 E ft 是要获取的视频集，而 Edt 是要在时间 t 从缓冲区中逐出的视频集。</p>
+<p>在每个时间段，播放器需要确定应该下载滑动窗口中的哪些视频。（<strong>即预取工作是由播放器来做的</strong>）时隙被定义为最小时间单位，其专用于一次视频传输。玩家还可以决定在任何时间段停止下载。</p>
+<p><img src="/img/Untitled1.png" alt="Untitled"></p>
+<h3 id="状态转换"><a href="#状态转换" class="headerlink" title="状态转换"></a>状态转换</h3><p><img src="/img/Untitled2.png" alt="Untitled"></p>
+<h3 id="奖励机制"><a href="#奖励机制" class="headerlink" title="奖励机制"></a>奖励机制</h3><p>决策者在状态 st 采取行动，并转移到另一个状态 st+1，产生奖励 rt 。我们将此处的奖励视为优化问题中的损失函数，其中包括 QoE 和浪费成本。</p>
+<hr>
+<p>我们将时间 t 的 用户质量（QoE） 定义为重新缓冲事件 et ∈ {0, 1} ，它指示当前视频 vt 是否由于时间 t 的缓存未命中而停止播放。</p>
+<p>仅当当前视频 Bvt（时间 t 时视频的<strong>缓冲内容</strong>&#x2F;缓冲区） <strong>比播放进度</strong>Qvt<strong>超前</strong>一段(Tslot)或已<strong>达到总长度</strong>Mvt时，播放器<strong>才开始播放</strong>当前视频vt。</p>
+<blockquote>
+<p>作者将重新缓冲事件作为qoe评价指标，不考虑视频质量，因为抖音采用了渐进式下载策略，视频质量是在生成播放列表时确定的，因此在播放视频时，视频质量保持不变。</p>
+</blockquote>
+<hr>
+<p>成本开销 → 缓冲了但由滚动事件而从未被观看的内容。将时间 t 的成本表示为 wt ，我们有：</p>
+<p><img src="/img/Untitled3.png" alt="Untitled"></p>
+<p>即被驱逐的所有视频的缓冲大小减去播放进度大小的和。<strong>成本是由滚动事件生成的</strong>，指示被逐出的视频中有多少片段尚未观看。</p>
+<hr>
+<p>损失函数LOSS（结合 QoE（重新缓冲） 和成本，得到 t 时刻的最终损失函数）：</p>
+<p><img src="/img/Untitled4.png" alt="Untitled"></p>
+<p>η 是一个超参数。它衡量成本的重要性，使用蜂窝网络时成本应较大，而使用 Wi-Fi 时成本应较小。</p>
+<hr>
+<p>我们的目标是找到一个策略 π(a|s) 来<strong>最小化</strong>会话中的<strong>总损失函数</strong>。 π(a|s) ：在给定当前状态的情况下选择某个动作的概率。优化问题正式定义为：</p>
+<p><img src="/img/Untitled5.png" alt="Untitled"></p>
+<h3 id="网络框架"><a href="#网络框架" class="headerlink" title="网络框架"></a>网络框架</h3><p><img src="/img/Untitled6.png" alt="Untitled"></p>
+<p>中央管理器维护两个通用模型。他们接受超参数不同的奖励函数的训练。其中一种是针对Wi-Fi场景，另一种是针对蜂窝网络。移动设备定期从中央管理器获取这两个模型，并根据当前的网络连接实时确定哪个模型生成策略。当用户观视频时，<strong>传感器进程</strong>会<strong>持续监控</strong>下载速度、用户输入和播放器统计数据。收集器收集会话中的痕迹，分析器充当网络中的工作人员。</p>
+<p>actor network：动作决策，选择下载当前视频，还是下一个视频，还是下下个视频</p>
+<p>critic network：LOSS值</p>
+<h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>跟踪驱动的实验结果证明，LiveClip 在各种场景下的性能比现有最先进的方法高出约 10%-40%。</p>
+<hr>
+<p>真实的短视频数据集（即抖音数据集）；</p>
+<p>随机选择视频，在每个观看会话中形成一个完整的播放列表；</p>
+<p>对于网络追踪数据，我们使用由[10]生成的数据集；</p>
+<p>由于很难获取到大规模的真实用户滚动行为追踪数据，我们假设滚动事件之间的时间间隔服从高斯分布；</p>
+<p>⚠️对于每个会话，我们随机生成一个列表，其中包含<strong>完整的视频播放列表</strong>，下载速度跟踪和模拟用户跟踪。我们的模拟器能够在代理采取行动时<strong>立即计算QoE和成本</strong>。</p>
+<hr>
+<p>我们将 LiveClip 与以下基准算法进行比较，每个算法代表一种流媒体策略。</p>
+<p>(1)最优。考虑到当前的下载速度和视频在视口中的用户停留时间，最优方法是<strong>玩家获得最多奖励的最佳策略</strong>。它被视为上限。</p>
+<p>(2）Next-One，抖音应用采用。有一个带有停止等待协议的滑动窗口来指示要请求哪些视频。在当前视频完成传送之前，播放器不会下载下一个视频。并且它将保持空闲状态，直到新视频进入视口。</p>
+<p>(3) Waterfall，这是Next-One策略的延伸，只不过它能够看到接下来的2个视频。</p>
+<p>(4) Buffer-Based (BB)，它更喜欢<strong>在滑动窗口中预取多个视频</strong>。它的灵感来自仅使用缓冲区来确定视频比特率的想法[9]。这里它选择滑动窗口中某个视频文件的字节范围。</p>
+<p>(5)随机，随机选择一个动作。此方法提供 QoE 的下限。</p>
+<blockquote>
+<p>buffer-based侧重于资源的有限使用，而Waterfall方法更看重 <strong>播放的流畅度</strong>而不是资源的过度使用。因为WIFI不限制流量，而运营商的网络（蜂窝网络）限制流量。WIF使用的是非授权频谱，只要满足无委会的要求，任何个人都可以自由使用。</p>
+</blockquote>
+<hr>
+<p>我们根据不同的下载速度模式将测试集的下载速度轨迹分为快速（&gt;1700 Kbps）、中速（1100-1700 Kbps）和慢速（&lt;1100 Kbps）组，我们模拟具有适度用户行为模式的 Wi-Fi 网络</p>
+<p><img src="/img/Untitled7.png" alt="Untitled"></p>
+<hr>
+<p>不同的用户行为模式。我们假设会话中滚动事件之间的间隔遵循高斯分布。我们将不同的用户行为模式分为 3 类：频繁（µ&#x3D;6，σ&#x3D;3）、中等（µ&#x3D;12，σ&#x3D;6）和耐心（µ &#x3D;18，σ&#x3D;9）。评估是在中等下载速度的Wi-Fi网络模拟中进行的。</p>
+<hr>
+<p>我们考虑三种不同的网络连接场景： (1)Vanilla-WiFi，其中损失函数中 η &#x3D; 0.1。 (2) Vanilla-Cellular，其中损失函数中 η &#x3D; 1。 (3) 交替，接入点每 30 秒更换为另一个。</p>
+<p>Waterfall方法在 Wi-Fi 情况下比 buffer-based 表现更好，而在蜂窝情况下反之亦然。因为在蜂窝的资源比较有限。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="https://sanli-b.com.cn">sanli</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://sanli-b.com.cn/posts/42132.html">https://sanli-b.com.cn/posts/42132.html</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://sanli-b.com.cn" target="_blank">sanli的博客之家</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/%E7%9F%AD%E8%A7%86%E9%A2%91%E8%87%AA%E9%80%82%E5%BA%94%E9%A2%84%E5%8F%96/">短视频自适应预取</a><a class="post-meta__tags" href="/tags/%E9%A2%84%E5%8F%96%E7%AE%97%E6%B3%95/">预取算法</a></div><div class="post_share"><div class="social-share" data-image="/img/liveclip.png" data-sites="wechat,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/js/social-share.min.js" defer></script></div></div><div class="post-reward"><div class="reward-button"><i class="fas fa-qrcode"></i> 打赏</div><div class="reward-main"><ul class="reward-all"><li class="reward-item"><a href="/img/wechat.jpg" target="_blank"><img class="post-qr-code-img" src="/img/wechat.jpg" alt="wechat"/></a><div class="post-qr-code-desc">wechat</div></li></ul></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-full"><a href="/posts/undefined.html" title="Learning"><img class="cover" src="http://pic1.win4000.com/wallpaper/2020-08-14/5f363d07a24be_270_185.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of previous post"><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">Learning</div></div></a></div></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><div><a href="/posts/28973.html" title="ALFIE:一种基于DRL的新型短视频自适应预取算法"><img class="cover" src="/img/alfie.png" alt="cover"><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i> 2023-10-06</div><div class="title">ALFIE:一种基于DRL的新型短视频自适应预取算法</div></div></a></div></div></div><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div class="vcomment" id="vcomment"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="is-center"><div class="avatar-img"><img src="https://picx.zhimg.com/80/v2-c4f6908a24f979675b29f5d3c3f090f1_1440w.webp?source=1940ef5c" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info__name">sanli</div><div class="author-info__description">记录和分享我的学习之旅~</div></div><div class="card-info-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">11</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">8</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">5</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/lxthnu"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons is-center"><a class="social-icon" href="https://github.com/lxthnu/" target="_blank" title="Github"><i class="fab fa-github" style="color: #24292e;"></i></a><a class="social-icon" href="mailto:1169078110@qq.com" target="_blank" title="QQ邮箱"><i class="fas fa-envelope" style="color: #4a7dbe;"></i></a><a class="social-icon" href="tencent://message/?uin=1169078110&amp;Site=Sambow&amp;Menu=yes" target="_blank" title="QQ"><i class="fa-brands fa-qq" style="color: #4a7dbe;"></i></a><a class="social-icon" href="https://www.zhihu.com/people/ddddd-47-45" target="_blank" title="知乎"><i class="fa-brands fa-zhihu" style="color: #4a7dbe;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">内容上新中~</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content is-expand"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#LiveClip-Towards-Intelligent-Mobile-Short-Form-Video-Streaming-with-Deep-Reinforcement-Learning"><span class="toc-number">1.</span> <span class="toc-text">LiveClip: Towards Intelligent Mobile Short-Form Video Streaming with Deep Reinforcement Learning</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%A0%94%E7%A9%B6%E8%83%8C%E6%99%AF"><span class="toc-number">2.</span> <span class="toc-text">研究背景</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BE%85%E8%A7%A3%E5%86%B3%E7%9A%84%E9%97%AE%E9%A2%98"><span class="toc-number">2.1.</span> <span class="toc-text">待解决的问题</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E8%B4%A1%E7%8C%AE"><span class="toc-number">3.</span> <span class="toc-text">贡献</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8A%96%E9%9F%B3%E7%9A%84%E6%B5%8B%E9%87%8F%E7%A0%94%E7%A9%B6"><span class="toc-number">3.1.</span> <span class="toc-text">抖音的测量研究</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%A0%94%E7%A9%B6%E7%BB%93%E6%9E%9C"><span class="toc-number">3.1.1.</span> <span class="toc-text">研究结果</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#LiveClip"><span class="toc-number">3.2.</span> <span class="toc-text">LiveClip</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%97%AE%E9%A2%98%E8%83%8C%E6%99%AF"><span class="toc-number">3.2.1.</span> <span class="toc-text">问题背景</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%8B%E8%BD%BD%E9%80%9F%E5%BA%A6%E5%92%8C%E7%94%A8%E6%88%B7%E4%BA%A4%E4%BA%92%E5%AD%A6%E4%B9%A0"><span class="toc-number">3.2.2.</span> <span class="toc-text">下载速度和用户交互学习</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%8A%B6%E6%80%81%E7%A9%BA%E9%97%B4%E7%9B%B8%E5%85%B3%E5%9B%A0%E7%B4%A0"><span class="toc-number">3.2.3.</span> <span class="toc-text">状态空间相关因素</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%8A%A8%E4%BD%9C"><span class="toc-number">3.2.4.</span> <span class="toc-text">动作</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%8A%B6%E6%80%81%E8%BD%AC%E6%8D%A2"><span class="toc-number">3.2.5.</span> <span class="toc-text">状态转换</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%A5%96%E5%8A%B1%E6%9C%BA%E5%88%B6"><span class="toc-number">3.2.6.</span> <span class="toc-text">奖励机制</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%BD%91%E7%BB%9C%E6%A1%86%E6%9E%B6"><span class="toc-number">3.2.7.</span> <span class="toc-text">网络框架</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E9%AA%8C"><span class="toc-number">3.3.</span> <span class="toc-text">实验</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/posts/42132.html" title="解读LiveClip:基于RDL的一种自适应短视频流策略"><img src="/img/liveclip.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="解读LiveClip:基于RDL的一种自适应短视频流策略"/></a><div class="content"><a class="title" href="/posts/42132.html" title="解读LiveClip:基于RDL的一种自适应短视频流策略">解读LiveClip:基于RDL的一种自适应短视频流策略</a><time datetime="2023-10-10T07:36:25.000Z" title="发表于 2023-10-10 15:36:25">2023-10-10</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/undefined.html" title="Learning"><img src="http://pic1.win4000.com/wallpaper/2020-08-14/5f363d07a24be_270_185.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="Learning"/></a><div class="content"><a class="title" href="/posts/undefined.html" title="Learning">Learning</a><time datetime="2023-10-10T07:33:31.000Z" title="发表于 2023-10-10 15:33:31">2023-10-10</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/28973.html" title="ALFIE:一种基于DRL的新型短视频自适应预取算法"><img src="/img/alfie.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="ALFIE:一种基于DRL的新型短视频自适应预取算法"/></a><div class="content"><a class="title" href="/posts/28973.html" title="ALFIE:一种基于DRL的新型短视频自适应预取算法">ALFIE:一种基于DRL的新型短视频自适应预取算法</a><time datetime="2023-10-06T12:14:49.000Z" title="发表于 2023-10-06 20:14:49">2023-10-06</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/42704.html" title="论文技巧-python画图（2）"><img src="https://th.bing.com/th/id/OIP.e1KMD18LBwvrubLN5BWoYwHaEK?w=293&amp;h=180&amp;c=7&amp;r=0&amp;o=5&amp;dpr=1.5&amp;pid=1.7" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="论文技巧-python画图（2）"/></a><div class="content"><a class="title" href="/posts/42704.html" title="论文技巧-python画图（2）">论文技巧-python画图（2）</a><time datetime="2023-09-30T10:28:43.000Z" title="发表于 2023-09-30 18:28:43">2023-09-30</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/posts/58064.html" title="论文技巧-python画图（1）"><img src="https://th.bing.com/th/id/OIP.e1KMD18LBwvrubLN5BWoYwHaEK?w=293&amp;h=180&amp;c=7&amp;r=0&amp;o=5&amp;dpr=1.5&amp;pid=1.7" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="论文技巧-python画图（1）"/></a><div class="content"><a class="title" href="/posts/58064.html" title="论文技巧-python画图（1）">论文技巧-python画图（1）</a><time datetime="2023-09-30T08:50:19.000Z" title="发表于 2023-09-30 16:50:19">2023-09-30</time></div></div></div></div></div></div></main><footer id="footer" style="background-image: url('/img/liveclip.png')"><div id="footer-wrap"><div class="copyright">&copy;2022 - 2023 By sanli</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="chat-btn" type="button" title="聊天"><i class="fas fa-sms"></i></button><a id="to_comment" href="#post-comment" title="直达评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox/fancybox.umd.min.js"></script><div class="js-pjax"><script>function loadValine () {
+  function initValine () {
+    const valine = new Valine(Object.assign({
+      el: '#vcomment',
+      appId: 'K0sWPZUF7Cgw6qeAAcGQTxgz-gzGzoHsz',
+      appKey: '3cyzlPVOiz9H3mVvznep21a2',
+      avatar: 'monsterid',
+      serverURLs: 'https://k0swpzuf.lc-cn-n1-shared.com',
+      emojiMaps: "",
+      path: window.location.pathname,
+      visitor: true
+    }, null))
+  }
+
+  if (typeof Valine === 'function') initValine() 
+  else getScript('https://cdn.jsdelivr.net/npm/valine/dist/Valine.min.js').then(initValine)
+}
+
+if ('Valine' === 'Valine' || !true) {
+  if (true) btf.loadComment(document.getElementById('vcomment'),loadValine)
+  else setTimeout(loadValine, 0)
+} else {
+  function loadOtherComment () {
+    loadValine()
+  }
+}</script></div><script src="https://cdn.jsdelivr.net/npm/blueimp-md5/js/md5.min.js"></script><script>window.addEventListener('load', () => {
+  const changeContent = (content) => {
+    if (content === '') return content
+
+    content = content.replace(/<img.*?src="(.*?)"?[^\>]+>/ig, '[图片]') // replace image link
+    content = content.replace(/<a[^>]+?href=["']?([^"']+)["']?[^>]*>([^<]+)<\/a>/gi, '[链接]') // replace url
+    content = content.replace(/<pre><code>.*?<\/pre>/gi, '[代码]') // replace code
+    content = content.replace(/<[^>]+>/g,"") // remove html tag
+
+    if (content.length > 150) {
+      content = content.substring(0,150) + '...'
+    }
+    return content
+  }
+
+  const getIcon = (icon, mail) => {
+    if (icon) return icon
+    let defaultIcon = '?d=monsterid'
+    let iconUrl = `https://gravatar.loli.net/avatar/${md5(mail.toLowerCase()) + defaultIcon}`
+    return iconUrl
+  }
+
+  const generateHtml = array => {
+    let result = ''
+
+    if (array.length) {
+      for (let i = 0; i < array.length; i++) {
+        result += '<div class=\'aside-list-item\'>'
+
+        if (true) {
+          const name = 'src'
+          result += `<a href='${array[i].url}' class='thumbnail'><img ${name}='${array[i].avatar}' alt='${array[i].nick}'></a>`
+        }
+
+        result += `<div class='content'>
+        <a class='comment' href='${array[i].url}' title='${array[i].content}'>${array[i].content}</a>
+        <div class='name'><span>${array[i].nick} / </span><time datetime="${array[i].date}">${btf.diffDate(array[i].date, true)}</time></div>
+        </div></div>`
+      }
+    } else {
+      result += '没有评论'
+    }
+
+    let $dom = document.querySelector('#card-newest-comments .aside-list')
+    $dom.innerHTML= result
+    window.lazyLoadInstance && window.lazyLoadInstance.update()
+    window.pjax && window.pjax.refresh($dom)
+  }
+
+  const getComment = () => {
+    const serverURL = 'https://k0swpzuf.lc-cn-n1-shared.com'
+
+    var settings = {
+      "method": "GET",
+      "headers": {
+        "X-LC-Id": 'K0sWPZUF7Cgw6qeAAcGQTxgz-gzGzoHsz',
+        "X-LC-Key": '3cyzlPVOiz9H3mVvznep21a2',
+        "Content-Type": "application/json"
+      },
+    }
+
+    fetch(`${serverURL}/1.1/classes/Comment?limit=6&order=-createdAt`,settings)
+      .then(response => response.json())
+      .then(data => {
+        const valineArray = data.results.map(function (e) {
+          return {
+            'avatar': getIcon(e.QQAvatar, e.mail),
+            'content': changeContent(e.comment),
+            'nick': e.nick,
+            'url': e.url + '#' + e.objectId,
+            'date': e.updatedAt,
+          }
+        })
+        saveToLocal.set('valine-newest-comments', JSON.stringify(valineArray), 10/(60*24))
+        generateHtml(valineArray)
+      }).catch(e => {
+        const $dom = document.querySelector('#card-newest-comments .aside-list')
+        $dom.textContent= "无法获取评论，请确认相关配置是否正确"
+      }) 
+  }
+
+  const newestCommentInit = () => {
+    if (document.querySelector('#card-newest-comments .aside-list')) {
+      const data = saveToLocal.get('valine-newest-comments')
+      if (data) {
+        generateHtml(JSON.parse(data))
+      } else {
+        getComment()
+      }
+    }
+  }
+
+  newestCommentInit()
+  document.addEventListener('pjax:complete', newestCommentInit)
+})</script><script src="https://cdn1.lncld.net/static/js/3.5.0/av-min.js"></script><script src="/zan/zan.js"></script><script id="click-heart" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/dist/click-heart.min.js" async="async" mobile="false"></script><script src="https://cdn.jsdelivr.net/npm/pjax/pjax.min.js"></script><script>let pjaxSelectors = ["head > title","#config-diff","#body-wrap","#rightside-config-hide","#rightside-config-show",".js-pjax"]
+
+var pjax = new Pjax({
+  elements: 'a:not([target="_blank"])',
+  selectors: pjaxSelectors,
+  cacheBust: false,
+  analytics: false,
+  scrollRestoration: false
+})
+
+document.addEventListener('pjax:send', function () {
+
+  // removeEventListener scroll 
+  window.tocScrollFn && window.removeEventListener('scroll', window.tocScrollFn)
+  window.scrollCollect && window.removeEventListener('scroll', scrollCollect)
+
+  document.getElementById('rightside').style.cssText = "opacity: ''; transform: ''"
+  
+  if (window.aplayers) {
+    for (let i = 0; i < window.aplayers.length; i++) {
+      if (!window.aplayers[i].options.fixed) {
+        window.aplayers[i].destroy()
+      }
+    }
+  }
+
+  typeof typed === 'object' && typed.destroy()
+
+  //reset readmode
+  const $bodyClassList = document.body.classList
+  $bodyClassList.contains('read-mode') && $bodyClassList.remove('read-mode')
+
+  typeof disqusjs === 'object' && disqusjs.destroy()
+})
+
+document.addEventListener('pjax:complete', function () {
+  window.refreshFn()
+
+  document.querySelectorAll('script[data-pjax]').forEach(item => {
+    const newScript = document.createElement('script')
+    const content = item.text || item.textContent || item.innerHTML || ""
+    Array.from(item.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value))
+    newScript.appendChild(document.createTextNode(content))
+    item.parentNode.replaceChild(newScript, item)
+  })
+
+  GLOBAL_CONFIG.islazyload && window.lazyLoadInstance.update()
+
+  typeof panguInit === 'function' && panguInit()
+
+  // google analytics
+  typeof gtag === 'function' && gtag('config', '', {'page_path': window.location.pathname});
+
+  // baidu analytics
+  typeof _hmt === 'object' && _hmt.push(['_trackPageview',window.location.pathname]);
+
+  typeof loadMeting === 'function' && document.getElementsByClassName('aplayer').length && loadMeting()
+
+  // prismjs
+  typeof Prism === 'object' && Prism.highlightAll()
+})
+
+document.addEventListener('pjax:error', (e) => {
+  if (e.request.status === 404) {
+    pjax.loadUrl('/404.html')
+  }
+})</script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script><div id="local-search"><div class="search-dialog"><nav class="search-nav"><span class="search-dialog-title">搜索</span><span id="loading-status"></span><button class="search-close-button"><i class="fas fa-times"></i></button></nav><div class="is-center" id="loading-database"><i class="fas fa-spinner fa-pulse"></i><span>  数据库加载中</span></div><div class="search-wrap"><div id="local-search-input"><div class="local-search-box"><input class="local-search-box--input" placeholder="搜索文章" type="text"/></div></div><hr/><div class="no-result" id="local-search-results"></div><div id="local-search-stats-wrap"></div></div></div><div id="search-mask"></div><script src="/js/search/local-search.js"></script></div></div></body></html>

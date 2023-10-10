@@ -4,6 +4,46 @@
   
     
     <entry>
+      <title>解读LiveClip:基于RDL的一种自适应短视频流策略</title>
+      <link href="/posts/42132.html"/>
+      <url>/posts/42132.html</url>
+      
+        <content type="html"><![CDATA[<h1 id="LiveClip-Towards-Intelligent-Mobile-Short-Form-Video-Streaming-with-Deep-Reinforcement-Learning"><a href="#LiveClip-Towards-Intelligent-Mobile-Short-Form-Video-Streaming-with-Deep-Reinforcement-Learning" class="headerlink" title="LiveClip: Towards Intelligent Mobile Short-Form Video Streaming with Deep Reinforcement Learning"></a>LiveClip: Towards Intelligent Mobile Short-Form Video Streaming with Deep Reinforcement Learning</h1><p><em><strong>NOSSDAV ‘20 ccf b</strong></em></p><h1 id="研究背景"><a href="#研究背景" class="headerlink" title="研究背景"></a>研究背景</h1><p>实测研究表明，抖音采用了一种相当简单的基于HTTP渐进式下载的策略（称为Next-One策略），该策略使用带有停止等待协议的滑动窗口。当网络连接较慢且用户滚动较快时，这种策略效果不佳。结果激励我们为移动短视频设计智能自适应流媒体方案。</p><p>由于不可预测的网络条件和频繁的用户交互事件（例如不耐烦的滚动和提前退出），满足短视频应用程序的用户体验质量（QoE）具有挑战性。</p><p>然而，最近的 深度强化学习 相关工作旨在研究传统长视频的比特率选择，而不是移动短视频，因为移动短视频是播放列表驱动的，通常具有恒定的比特率。</p><h2 id="待解决的问题"><a href="#待解决的问题" class="headerlink" title="待解决的问题"></a>待解决的问题</h2><p>尽管做了上述工作，短视频服务仍然面临挑战：</p><p>缓存决策具有级联效应。也就是说，流畅播放需要足够的预取数据，这会<strong>抢占其他视频的缓存</strong>，导致日后卡顿。无线移动<strong>网络连接动态变化</strong>。</p><p>而大多数短视频服务平台（例如抖音）都试探性地采用了 <strong>HTTP 渐进式下载策略</strong>，因此<strong>流媒体不是码率自适应的</strong>，因此<strong>更容易受到网络动态的影响</strong>。最后但并非最不重要的一点是，用户可以在很短的时间内轻松生成大量滚动事件，这可能会<strong>导致极高的缓存未命中率</strong>。</p><h1 id="贡献"><a href="#贡献" class="headerlink" title="贡献"></a>贡献</h1><p>提出了一种名为 LiveClip 的自适应流媒体策略，它基于强化学习框架。所提出的方法可以以较低的使用成本开销（缓冲了但由滚动事件而从未被观看的内容）带来更好的 QoE（重新缓冲次数较少）。</p><h2 id="抖音的测量研究"><a href="#抖音的测量研究" class="headerlink" title="抖音的测量研究"></a>抖音的测量研究</h2><p>我们首先对中国流行的短视频移动应用程序抖音进行了系统的测量研究。测量结果表明，抖音采用的简单的next-one策略导致了用户观看体验的下降和额外的资源使用成本。</p><h3 id="研究结果"><a href="#研究结果" class="headerlink" title="研究结果"></a>研究结果</h3><p>抖音则采用<strong>渐进式下载</strong>。它也基于 HTTP，但 CDN 托管完整的视频文件。（通过抓包获得连续视频的传输时间线）播放器总是下载当前视频。完成后，播放器开始下载下一个视频文件。当有滚动事件时，先前的连接会立即关闭。我们将这种固定的流方案称为 Next-One 策略。</p><hr><p>较长的延迟和更快的网络速度会减少重新缓冲事件的数量。总浪费成本定义为<strong>下降量</strong>与<strong>部分中绿点数量的差值</strong>，如果差值为负则为 0。（即释放的量表示该视频的下载量，绿点个数表示用户观看的量）</p><p><img src="/img/Untitled-16969233990681.png" alt="Untitled"></p><p>例如，播放器在第一段中仅获得了4秒（4个绿点，绿点表示平滑播放）的流畅播放，之后的下降从4.27下降到0，因此<strong>间断时间为6秒</strong>（10-4），<strong>浪费时间为0.27秒。</strong></p><hr><p>通过使用 Appium [1]，我们可以模拟真实用户的滚动行为。我们观察到超过一半的视频 (68.6%) 不超过 15 秒，平均视频比特率为1190 Kbps。</p><p>结果显示，33%的<strong>推荐视频</strong>是在一天内发布的，72%是在一周内发布的，96%是在一个月内发布的。推荐系统倾向于推荐最近的视频（前10天左右）。</p><h2 id="LiveClip"><a href="#LiveClip" class="headerlink" title="LiveClip"></a>LiveClip</h2><p>使用深度强化学习（DRL）方法提出了一种称为 LiveClip 的自适应短视频流策略。 LiveClip网络合并<strong>下载速度</strong>和<strong>用户交互</strong>等外部因素，以及考虑了<strong>播放列表</strong>中视频的信息。<strong>不同网络场景</strong>下对应有不同的神经网络模型。</p><hr><p>T 表示观看会话的总时长。</p><p> bt ：时间 t 时的下载速度、 ct ：时间 t 时的用户交互、 dt ：时间 t 时的玩家状态。</p><p>Tslot: 选择在每个时间段下载播放列表中的哪些视频。将时隙Tslot和视频段设置为<strong>1秒为单位</strong></p><p>在每个时间步，决策者（player）选择一个动作 a，在给定转移概率 Pa(s, s ‘) 的情况下从状态 s 转移到新的状态 s ‘，并获得相应的奖励 Ra(s, s ‘)。</p><p>令 S &#x3D; {s1, s2, . 。 。 , sT } 表示<strong>状态空间</strong>。 T 是观看会话的总时长。 <strong>st &#x3D; (bt ,ct ,dt )。</strong></p><p>设 vt 表示时间 t 时播放器窗口所在的视频。</p><p>Bvt ：时间 t 时视口中视频的缓冲内容、 Qvt ：播放进度、 Mvt 表示：视频长度。仅当<strong>当前片段完全下载后，播放器才开始播放</strong>。</p><hr><h3 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h3><p>我们假设视频<strong>以恒定的比特率进行编码</strong>，以便<strong>具有相同长度</strong>的每个片段具有<strong>相同的大小</strong>。</p><p>在每个时隙，播放器只能请求滑动窗口中的一个视频。当用户滚动屏幕时，滑走的视频内容将立即被驱逐。</p><p>⚠️（ddl）假设时隙为 1 秒，当下一个 1 秒片段尚未完全缓冲时，视频播放就会停止。</p><hr><h3 id="下载速度和用户交互学习"><a href="#下载速度和用户交互学习" class="headerlink" title="下载速度和用户交互学习"></a>下载速度和用户交互学习</h3><p>我们构建了一个一维 CNN 层，并将过去 k 秒的下载速度作为输入，学习<strong>下载速度的模式</strong>。</p><p>我们构建了另一个 1D-CNN 来学习用户行为模式。以过去k个视频的停留时间作为输入。它学习历史用户交互的模式，并希望它能够<strong>预测用户最有可能滚动屏幕的时间。</strong></p><h3 id="状态空间相关因素"><a href="#状态空间相关因素" class="headerlink" title="状态空间相关因素"></a>状态空间相关因素</h3><ul><li>过去k 秒的下载速度测量。—提供下载速度历史信息</li><li>过去k个视频的用户停留时间。—提供用户行为历史信息</li><li>播放进度。—播放器当前的播放状态</li><li>当前停留时间。</li><li>重播回合。</li><li>滑动窗口中视频的比特率。—滑动窗口中<strong>正在观看</strong>或接下来几秒<strong>将观看的视频</strong>相关</li><li>滑动窗口中视频的长度。</li><li>滑动窗口中的视频缓冲内容。</li><li>下载滑动窗口中视频所花费的时间。</li><li>滑动窗口中已完成的视频。</li></ul><h3 id="动作"><a href="#动作" class="headerlink" title="动作"></a>动作</h3><p>设 A &#x3D; {a1, a2, …, aT } 表示动作空间。给定一个状态，代理需要采取操作 at &#x3D; (E ft , Edt )，其中 E ft 是要获取的视频集，而 Edt 是要在时间 t 从缓冲区中逐出的视频集。</p><p>在每个时间段，播放器需要确定应该下载滑动窗口中的哪些视频。（<strong>即预取工作是由播放器来做的</strong>）时隙被定义为最小时间单位，其专用于一次视频传输。玩家还可以决定在任何时间段停止下载。</p><p><img src="/img/Untitled1.png" alt="Untitled"></p><h3 id="状态转换"><a href="#状态转换" class="headerlink" title="状态转换"></a>状态转换</h3><p><img src="/img/Untitled2.png" alt="Untitled"></p><h3 id="奖励机制"><a href="#奖励机制" class="headerlink" title="奖励机制"></a>奖励机制</h3><p>决策者在状态 st 采取行动，并转移到另一个状态 st+1，产生奖励 rt 。我们将此处的奖励视为优化问题中的损失函数，其中包括 QoE 和浪费成本。</p><hr><p>我们将时间 t 的 用户质量（QoE） 定义为重新缓冲事件 et ∈ {0, 1} ，它指示当前视频 vt 是否由于时间 t 的缓存未命中而停止播放。</p><p>仅当当前视频 Bvt（时间 t 时视频的<strong>缓冲内容</strong>&#x2F;缓冲区） <strong>比播放进度</strong>Qvt<strong>超前</strong>一段(Tslot)或已<strong>达到总长度</strong>Mvt时，播放器<strong>才开始播放</strong>当前视频vt。</p><blockquote><p>作者将重新缓冲事件作为qoe评价指标，不考虑视频质量，因为抖音采用了渐进式下载策略，视频质量是在生成播放列表时确定的，因此在播放视频时，视频质量保持不变。</p></blockquote><hr><p>成本开销 → 缓冲了但由滚动事件而从未被观看的内容。将时间 t 的成本表示为 wt ，我们有：</p><p><img src="/img/Untitled3.png" alt="Untitled"></p><p>即被驱逐的所有视频的缓冲大小减去播放进度大小的和。<strong>成本是由滚动事件生成的</strong>，指示被逐出的视频中有多少片段尚未观看。</p><hr><p>损失函数LOSS（结合 QoE（重新缓冲） 和成本，得到 t 时刻的最终损失函数）：</p><p><img src="/img/Untitled4.png" alt="Untitled"></p><p>η 是一个超参数。它衡量成本的重要性，使用蜂窝网络时成本应较大，而使用 Wi-Fi 时成本应较小。</p><hr><p>我们的目标是找到一个策略 π(a|s) 来<strong>最小化</strong>会话中的<strong>总损失函数</strong>。 π(a|s) ：在给定当前状态的情况下选择某个动作的概率。优化问题正式定义为：</p><p><img src="/img/Untitled5.png" alt="Untitled"></p><h3 id="网络框架"><a href="#网络框架" class="headerlink" title="网络框架"></a>网络框架</h3><p><img src="/img/Untitled6.png" alt="Untitled"></p><p>中央管理器维护两个通用模型。他们接受超参数不同的奖励函数的训练。其中一种是针对Wi-Fi场景，另一种是针对蜂窝网络。移动设备定期从中央管理器获取这两个模型，并根据当前的网络连接实时确定哪个模型生成策略。当用户观视频时，<strong>传感器进程</strong>会<strong>持续监控</strong>下载速度、用户输入和播放器统计数据。收集器收集会话中的痕迹，分析器充当网络中的工作人员。</p><p>actor network：动作决策，选择下载当前视频，还是下一个视频，还是下下个视频</p><p>critic network：LOSS值</p><h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>跟踪驱动的实验结果证明，LiveClip 在各种场景下的性能比现有最先进的方法高出约 10%-40%。</p><hr><p>真实的短视频数据集（即抖音数据集）；</p><p>随机选择视频，在每个观看会话中形成一个完整的播放列表；</p><p>对于网络追踪数据，我们使用由[10]生成的数据集；</p><p>由于很难获取到大规模的真实用户滚动行为追踪数据，我们假设滚动事件之间的时间间隔服从高斯分布；</p><p>⚠️对于每个会话，我们随机生成一个列表，其中包含<strong>完整的视频播放列表</strong>，下载速度跟踪和模拟用户跟踪。我们的模拟器能够在代理采取行动时<strong>立即计算QoE和成本</strong>。</p><hr><p>我们将 LiveClip 与以下基准算法进行比较，每个算法代表一种流媒体策略。</p><p>(1)最优。考虑到当前的下载速度和视频在视口中的用户停留时间，最优方法是<strong>玩家获得最多奖励的最佳策略</strong>。它被视为上限。</p><p>(2）Next-One，抖音应用采用。有一个带有停止等待协议的滑动窗口来指示要请求哪些视频。在当前视频完成传送之前，播放器不会下载下一个视频。并且它将保持空闲状态，直到新视频进入视口。</p><p>(3) Waterfall，这是Next-One策略的延伸，只不过它能够看到接下来的2个视频。</p><p>(4) Buffer-Based (BB)，它更喜欢<strong>在滑动窗口中预取多个视频</strong>。它的灵感来自仅使用缓冲区来确定视频比特率的想法[9]。这里它选择滑动窗口中某个视频文件的字节范围。</p><p>(5)随机，随机选择一个动作。此方法提供 QoE 的下限。</p><blockquote><p>buffer-based侧重于资源的有限使用，而Waterfall方法更看重 <strong>播放的流畅度</strong>而不是资源的过度使用。因为WIFI不限制流量，而运营商的网络（蜂窝网络）限制流量。WIF使用的是非授权频谱，只要满足无委会的要求，任何个人都可以自由使用。</p></blockquote><hr><p>我们根据不同的下载速度模式将测试集的下载速度轨迹分为快速（&gt;1700 Kbps）、中速（1100-1700 Kbps）和慢速（&lt;1100 Kbps）组，我们模拟具有适度用户行为模式的 Wi-Fi 网络</p><p><img src="/img/Untitled7.png" alt="Untitled"></p><hr><p>不同的用户行为模式。我们假设会话中滚动事件之间的间隔遵循高斯分布。我们将不同的用户行为模式分为 3 类：频繁（µ&#x3D;6，σ&#x3D;3）、中等（µ&#x3D;12，σ&#x3D;6）和耐心（µ &#x3D;18，σ&#x3D;9）。评估是在中等下载速度的Wi-Fi网络模拟中进行的。</p><hr><p>我们考虑三种不同的网络连接场景： (1)Vanilla-WiFi，其中损失函数中 η &#x3D; 0.1。 (2) Vanilla-Cellular，其中损失函数中 η &#x3D; 1。 (3) 交替，接入点每 30 秒更换为另一个。</p><p>Waterfall方法在 Wi-Fi 情况下比 buffer-based 表现更好，而在蜂窝情况下反之亦然。因为在蜂窝的资源比较有限。</p>]]></content>
+      
+      
+      <categories>
+          
+          <category> 论文阅读 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 短视频自适应预取 </tag>
+            
+            <tag> 预取算法 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>Learning</title>
+      <link href="/posts/undefined.html"/>
+      <url>/posts/undefined.html</url>
+      
+        <content type="html"><![CDATA[]]></content>
+      
+      
+      
+    </entry>
+    
+    
+    
+    <entry>
       <title>ALFIE:一种基于DRL的新型短视频自适应预取算法</title>
       <link href="/posts/28973.html"/>
       <url>/posts/28973.html</url>
